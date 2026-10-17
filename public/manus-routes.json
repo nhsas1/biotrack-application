@@ -1,0 +1,1 @@
+{"routes":[{"path":"/","title":"Home"},{"path":"/samples","title":"Samples"},{"path":"/samples/new","title":"Add Sample"},{"path":"/samples/:id","title":"Sample Details"},{"path":"/experiments","title":"Experiments"},{"path":"/experiments/:id","title":"Experiment Details"},{"path":"/profile","title":"Profile"}]}

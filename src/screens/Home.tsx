@@ -9,9 +9,17 @@ import {
   Sparkles,
   TestTubeDiagonal,
 } from "lucide-react";
-import { experiments, type Sample, type Task } from "../lib/data";
+import {
+  today,
+  type Experiment,
+  type ResearcherProfile,
+  type Sample,
+  type Task,
+} from "../lib/data";
 import {
   Badge,
+  EmptyState,
+  formatDate,
   PageHeading,
   Progress,
   SampleIcon,
@@ -20,20 +28,37 @@ import {
 
 type Props = {
   samples: Sample[];
+  experiments: Experiment[];
+  profile: ResearcherProfile;
   tasks: Task[];
   toggleTask: (id: string) => void;
   navigate: (path: string) => void;
   dateFormat: string;
 };
-
-export default function Home({ samples, tasks, toggleTask, navigate }: Props) {
+export default function Home({
+  samples,
+  experiments,
+  profile,
+  tasks,
+  toggleTask,
+  navigate,
+  dateFormat,
+}: Props) {
   const pending = tasks.filter((task) => !task.done).length;
   const recent = samples.slice(0, 4);
+  const activeExperiments = experiments.filter(
+    (experiment) => experiment.status !== "Completed",
+  );
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const thisWeek = samples.filter(
+    (sample) => new Date(sample.created_at) >= weekAgo,
+  ).length;
   return (
     <>
       <PageHeading
         eyebrow="YOUR LAB, AT A GLANCE"
-        title="Welcome back, Researcher!"
+        title={`Welcome back, ${profile.full_name}!`}
         subtitle="A clear view of your samples, experiments, and what’s next."
       >
         <button
@@ -46,9 +71,16 @@ export default function Home({ samples, tasks, toggleTask, navigate }: Props) {
       </PageHeading>
       <div className="day-line">
         <CalendarDays size={15} />
-        <span>Saturday, October 17, 2026</span>
+        <span>
+          {new Date(`${today()}T12:00:00`).toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+          })}
+        </span>
         <span className="day-separator">·</span>
-        <span>BioTrack Research Lab</span>
+        <span>{profile.laboratory}</span>
       </div>
       <div className="stats-row">
         <button className="stat-card" onClick={() => navigate("/samples")}>
@@ -59,10 +91,8 @@ export default function Home({ samples, tasks, toggleTask, navigate }: Props) {
             <ArrowUpRight size={17} />
           </div>
           <div className="stat-value">
-            {48 + samples.length - 8}
-            <span className="stat-trend">
-              +{4 + samples.length - 8} this week
-            </span>
+            {samples.length}
+            <span className="stat-trend">+{thisWeek} this week</span>
           </div>
           <p>Total Samples</p>
           <div className="stat-bottom">Organized and ready for research</div>
@@ -75,10 +105,11 @@ export default function Home({ samples, tasks, toggleTask, navigate }: Props) {
             <ArrowUpRight size={17} />
           </div>
           <div className="stat-value">
-            6<span className="stat-tag">In the lab</span>
+            {activeExperiments.length}
+            <span className="stat-tag">In the lab</span>
           </div>
           <p>Active Experiments</p>
-          <div className="stat-bottom">Good science, one step at a time</div>
+          <div className="stat-bottom">Planned or in progress</div>
         </button>
         <button
           className="stat-card"
@@ -101,7 +132,7 @@ export default function Home({ samples, tasks, toggleTask, navigate }: Props) {
           <p>Pending Tasks</p>
           <div className="stat-bottom">
             {pending
-              ? "A few things on your radar"
+              ? "A few local demo reminders on your radar"
               : "Everything is taken care of"}
           </div>
         </button>
@@ -126,34 +157,26 @@ export default function Home({ samples, tasks, toggleTask, navigate }: Props) {
             action="View samples"
             onAction={() => navigate("/samples")}
           />
-          <p className="section-subtitle">The latest from your laboratory</p>
+          <p className="section-subtitle">
+            Your most recently registered samples
+          </p>
           <div className="activity-list">
-            {recent.map((sample, index) => (
+            {recent.map((sample) => (
               <button
                 className="activity-item"
                 key={sample.id}
                 onClick={() => navigate(`/samples/${sample.id}`)}
               >
-                <SampleIcon type={sample.type} />
+                <SampleIcon type={sample.sample_type} />
                 <div className="activity-info">
-                  <strong>
-                    {index === 1
-                      ? "Sample processing updated"
-                      : "New sample registered"}
-                  </strong>
+                  <strong>Sample registered</strong>
                   <p>
-                    {sample.id}
+                    {sample.sample_code}
                     <span>·</span>
-                    {sample.name}
+                    {sample.sample_type} sample
                   </p>
                   <small>
-                    {index === 0
-                      ? "12 minutes ago"
-                      : index === 1
-                        ? "45 minutes ago"
-                        : index === 2
-                          ? "2 hours ago"
-                          : "3 hours ago"}
+                    {formatDate(sample.created_at.slice(0, 10), dateFormat)}
                   </small>
                 </div>
                 <span className="activity-status">
@@ -162,10 +185,18 @@ export default function Home({ samples, tasks, toggleTask, navigate }: Props) {
                 <ArrowRight className="activity-arrow" size={17} />
               </button>
             ))}
+            {!recent.length && (
+              <EmptyState
+                title="No samples yet"
+                description="Your live sample total is 0. Add a fictional sample to get started."
+                action="Add Sample"
+                onAction={() => navigate("/samples/new")}
+              />
+            )}
           </div>
           <div className="panel-footnote">
             <span className="tiny-dot" />
-            Showing fictional demo activity
+            Your account's fictional sample records
           </div>
         </section>
         <section className="panel experiment-overview">
@@ -177,32 +208,37 @@ export default function Home({ samples, tasks, toggleTask, navigate }: Props) {
           <p className="section-subtitle">
             Keep your experiments moving forward
           </p>
-          {experiments
-            .filter((experiment) => experiment.status === "In Progress")
-            .slice(0, 2)
-            .map((experiment) => (
-              <button
-                className="mini-experiment"
-                key={experiment.id}
-                onClick={() => navigate(`/experiments/${experiment.id}`)}
-              >
-                <div className="mini-experiment-top">
-                  <span className="round-icon mint">
-                    <FlaskConical size={18} />
-                  </span>
-                  <div>
-                    <strong>{experiment.name}</strong>
-                    <small>{experiment.id} · Molecular biology</small>
-                  </div>
-                  <ArrowUpRight size={16} />
+          {activeExperiments.slice(0, 2).map((experiment) => (
+            <button
+              className="mini-experiment"
+              key={experiment.id}
+              onClick={() => navigate(`/experiments/${experiment.id}`)}
+            >
+              <div className="mini-experiment-top">
+                <span className="round-icon mint">
+                  <FlaskConical size={18} />
+                </span>
+                <div>
+                  <strong>{experiment.title}</strong>
+                  <small>{experiment.experiment_type}</small>
                 </div>
-                <div className="progress-caption">
-                  <span>In Progress</span>
-                  <strong>{experiment.progress}%</strong>
-                </div>
-                <Progress value={experiment.progress} />
-              </button>
-            ))}
+                <ArrowUpRight size={16} />
+              </div>
+              <div className="progress-caption">
+                <span>{experiment.status}</span>
+                <strong>{experiment.progress}%</strong>
+              </div>
+              <Progress value={experiment.progress} />
+            </button>
+          ))}
+          {!activeExperiments.length && (
+            <EmptyState
+              title="No active experiments"
+              description="Planned and in-progress experiments appear here."
+              action="Manage experiments"
+              onAction={() => navigate("/experiments")}
+            />
+          )}
           <button
             className="all-experiments"
             onClick={() => navigate("/experiments")}
@@ -216,7 +252,7 @@ export default function Home({ samples, tasks, toggleTask, navigate }: Props) {
         <SectionTitle title="On your radar" />
         <span className="task-count">{pending} pending</span>
         <p className="section-subtitle">
-          Small steps that keep your research on track
+          Four fictional reminders, saved only on this device
         </p>
         <div className="tasks-grid">
           {tasks.map((task) => (
@@ -238,8 +274,9 @@ export default function Home({ samples, tasks, toggleTask, navigate }: Props) {
         </div>
       </section>
       <p className="demo-note">
-        Lab summary uses illustrative totals. The Samples tab contains 8 example
-        records, plus any samples you add.
+        Sample and experiment totals reflect your account's actual records. The
+        four pending-task reminders are local, fictional examples, not database
+        tasks.
       </p>
     </>
   );

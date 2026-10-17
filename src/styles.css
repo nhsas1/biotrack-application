@@ -2223,3 +2223,158 @@ h2 {
     scroll-behavior: auto !important;
   }
 }
+
+/* Connected-account controls reuse the existing panels, forms, and palette. */
+.form-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+button:disabled,
+.form-fields:disabled {
+  opacity: 0.65;
+}
+.badge.stored {
+  background: #eaf6ee;
+  color: #52976b;
+}
+.auth-content {
+  max-width: 680px;
+}
+.auth-form .form-grid {
+  grid-template-columns: 1fr;
+}
+.auth-mode {
+  margin-top: 24px;
+}
+.loading-state {
+  padding: 60px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.loading-state > svg {
+  color: var(--teal);
+}
+.loading-state > p:not(.form-error) {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.sync-status {
+  color: var(--teal);
+  font-size: 11px;
+  margin-bottom: 16px;
+}
+.sync-error {
+  margin: 0 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.refreshing {
+  animation: refresh-spin 1.5s linear infinite;
+}
+@keyframes refresh-spin {
+  to { transform: rotate(360deg); }
+}
+.record-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.secondary-button.danger-button {
+  color: #ac5c5c;
+  border-color: #eedbdb;
+}
+.primary-button.danger-button {
+  background: #a65050;
+  color: white;
+}
+.delete-confirm {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.delete-confirm > div {
+  flex: 1;
+  min-width: 180px;
+}
+.delete-confirm strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #a65050;
+}
+.progress-fields {
+  margin-top: 25px;
+}
+.form-grid input[type="range"] {
+  padding: 0;
+  accent-color: var(--teal);
+}
+.profile-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+.researcher-content .profile-email {
+  margin-top: 14px;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.inventory-toolbar {
+  flex-wrap: wrap;
+}
+.status-filter {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+  color: #647c89;
+  padding: 12px;
+  min-height: 43px;
+  font-size: 11px;
+}
+.page-heading h1,
+.sample-identity strong,
+.detail-intro h2,
+.detail-item strong,
+.detail-notes p,
+.experiment-description,
+.experiment-card h2,
+.researcher-content h2,
+.profile-lab strong,
+.lab-card strong {
+  overflow-wrap: anywhere;
+}
+.detail-item,
+.sample-identity > div,
+.activity-info,
+.mini-experiment-top > div {
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .page-heading > .record-actions,
+  .page-heading > .secondary-button {
+    margin-top: 18px;
+  }
+  .inventory-toolbar .search-field {
+    flex-basis: 100%;
+  }
+  .status-filter {
+    width: 100%;
+    font-size: 16px;
+  }
+  .delete-confirm > button {
+    flex: 1;
+  }
+}
+@media (max-width: 480px) {
+  .topbar-actions .demo-pill {
+    display: none;
+  }
+}

@@ -2,20 +2,25 @@ import { useMemo, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   CalendarDays,
-  Check,
-  MapPin,
+  Pencil,
   Plus,
+  Save,
   Search,
   ShieldCheck,
   TestTubeDiagonal,
+  Trash2,
   X,
 } from "lucide-react";
 import {
+  sampleStatuses,
   sampleTypes,
+  today,
   type Sample,
-  type SampleType,
+  type SampleDraft,
   type SampleStatus,
+  type SampleType,
 } from "../lib/data";
+import { errorMessage } from "../lib/api";
 import {
   BackButton,
   Badge,
@@ -34,20 +39,23 @@ type Props = {
 export default function Samples({ samples, navigate, dateFormat }: Props) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All Samples");
+  const [status, setStatus] = useState("All statuses");
   const filtered = useMemo(
     () =>
       samples.filter(
         (sample) =>
-          (category === "All Samples" || sample.type === category) &&
-          `${sample.id} ${sample.name} ${sample.type} ${sample.status} ${sample.collected}`
+          (category === "All Samples" || sample.sample_type === category) &&
+          (status === "All statuses" || sample.status === status) &&
+          `${sample.sample_code} ${sample.sample_type} ${sample.status} ${sample.collection_date} ${sample.notes ?? ""}`
             .toLowerCase()
             .includes(search.trim().toLowerCase()),
       ),
-    [samples, search, category],
+    [samples, search, category, status],
   );
   const reset = () => {
     setSearch("");
     setCategory("All Samples");
+    setStatus("All statuses");
   };
   return (
     <>
@@ -83,6 +91,16 @@ export default function Samples({ samples, navigate, dateFormat }: Props) {
             </button>
           )}
         </label>
+        <select
+          className="status-filter"
+          aria-label="Filter samples by status"
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+        >
+          {["All statuses", ...sampleStatuses].map((value) => (
+            <option key={value}>{value}</option>
+          ))}
+        </select>
         <div className="inventory-count">
           <TestTubeDiagonal size={17} />
           <strong>{samples.length}</strong> sample records
@@ -97,13 +115,15 @@ export default function Samples({ samples, navigate, dateFormat }: Props) {
           <button
             key={type}
             onClick={() => setCategory(type)}
+            aria-pressed={category === type}
             className={category === type ? "selected" : ""}
           >
             {type}
             <span>
               {type === "All Samples"
                 ? samples.length
-                : samples.filter((sample) => sample.type === type).length}
+                : samples.filter((sample) => sample.sample_type === type)
+                    .length}
             </span>
           </button>
         ))}
@@ -124,16 +144,16 @@ export default function Samples({ samples, navigate, dateFormat }: Props) {
               onClick={() => navigate(`/samples/${sample.id}`)}
             >
               <div className="sample-identity">
-                <SampleIcon type={sample.type} />
+                <SampleIcon type={sample.sample_type} />
                 <div>
-                  <strong>{sample.name}</strong>
-                  <small>{sample.id}</small>
+                  <strong>{sample.sample_code}</strong>
+                  <small>{sample.sample_type} sample</small>
                 </div>
               </div>
-              <span className="sample-type">{sample.type}</span>
+              <span className="sample-type">{sample.sample_type}</span>
               <span className="sample-date">
                 <CalendarDays size={14} />
-                {formatDate(sample.collected, dateFormat)}
+                {formatDate(sample.collection_date, dateFormat)}
               </span>
               <Badge status={sample.status} />
               <ArrowRight size={17} />
@@ -141,22 +161,29 @@ export default function Samples({ samples, navigate, dateFormat }: Props) {
           ))
         ) : (
           <EmptyState
-            title="No samples found"
-            description="Try a different search or category. Your next discovery might be one filter away."
-            action="Clear filters"
-            onAction={reset}
+            title={
+              samples.length
+                ? "No samples found"
+                : "Your sample library is empty"
+            }
+            description={
+              samples.length
+                ? "Try a different search, type, or status."
+                : "Add your first fictional sample to start your library. No example records have been added."
+            }
+            action={samples.length ? "Clear filters" : "Add Sample"}
+            onAction={samples.length ? reset : () => navigate("/samples/new")}
           />
         )}
         <div className="sample-list-footer">
           Showing {filtered.length} of {samples.length} fictional samples
-          <span>Stored locally in your browser</span>
+          <span>Synced with your account</span>
         </div>
       </section>
       <div className="notice subtle-notice">
         <ShieldCheck size={17} />
         <p>
-          This is a demonstration library. Add fictional laboratory records only
-          — never patient information.
+          Add fictional laboratory records only — never patient information.
         </p>
       </div>
     </>
@@ -165,13 +192,23 @@ export default function Samples({ samples, navigate, dateFormat }: Props) {
 
 export function SampleDetails({
   sample,
+  samples,
   navigate,
   dateFormat,
+  onSave,
+  onDelete,
 }: {
   sample?: Sample;
+  samples: Sample[];
   navigate: (path: string) => void;
   dateFormat: string;
+  onSave: (draft: SampleDraft) => Promise<void>;
+  onDelete: () => Promise<void>;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   if (!sample)
     return (
       <>
@@ -181,9 +218,39 @@ export function SampleDetails({
         />
         <EmptyState
           title="Sample not found"
-          description="This record isn't available in your local sample library."
+          description="This record is not available in your account's sample library."
           action="View samples"
           onAction={() => navigate("/samples")}
+        />
+      </>
+    );
+  async function remove() {
+    setBusy(true);
+    setError("");
+    try {
+      await onDelete();
+    } catch (cause) {
+      setError(errorMessage(cause));
+      setBusy(false);
+    }
+  }
+  if (editing)
+    return (
+      <>
+        <BackButton label="Back to sample" onClick={() => setEditing(false)} />
+        <PageHeading
+          eyebrow="UPDATE YOUR SAMPLE"
+          title={`Edit ${sample.sample_code}`}
+          subtitle="Keep your fictional sample record up to date."
+        />
+        <SampleForm
+          samples={samples}
+          initial={sample}
+          onSave={async (draft) => {
+            await onSave(draft);
+            setEditing(false);
+          }}
+          onCancel={() => setEditing(false)}
         />
       </>
     );
@@ -194,31 +261,39 @@ export function SampleDetails({
         onClick={() => navigate("/samples")}
       />
       <PageHeading
-        eyebrow={`SAMPLE RECORD · ${sample.id}`}
-        title={sample.name}
+        eyebrow={`SAMPLE RECORD · ${sample.sample_code}`}
+        title={sample.sample_code}
         subtitle="A complete view of your fictional laboratory sample."
       >
-        <Badge status={sample.status} />
+        <div className="record-actions">
+          <Badge status={sample.status} />
+          <button className="secondary-button" onClick={() => setEditing(true)}>
+            <Pencil size={16} />
+            Edit Sample
+          </button>
+        </div>
       </PageHeading>
       <section className="panel detail-panel">
         <div className="detail-intro">
-          <SampleIcon type={sample.type} size={30} />
+          <SampleIcon type={sample.sample_type} size={30} />
           <div>
-            <h2>{sample.id}</h2>
-            <p>{sample.type} sample</p>
+            <h2>{sample.sample_code}</h2>
+            <p>{sample.sample_type} sample</p>
           </div>
-          <span className="detail-demo-label">DEMO RECORD</span>
+          <span className="detail-demo-label">FICTIONAL RECORD</span>
         </div>
         <div className="detail-grid">
-          <DetailItem label="Sample type" value={sample.type} />
+          <DetailItem label="Sample ID / code" value={sample.sample_code} />
+          <DetailItem label="Sample type" value={sample.sample_type} />
           <DetailItem
             label="Collection date"
-            value={formatDate(sample.collected, dateFormat)}
+            value={formatDate(sample.collection_date, dateFormat)}
           />
-          <DetailItem label="Storage location" value={sample.location} />
-          <DetailItem label="Volume / quantity" value={sample.volume} />
           <DetailItem label="Status" value={sample.status} />
-          <DetailItem label="Laboratory" value="BioTrack Research Lab" />
+          <DetailItem
+            label="Registered"
+            value={formatDate(sample.created_at.slice(0, 10), dateFormat)}
+          />
         </div>
         <div className="detail-notes">
           <h3>Laboratory notes</h3>
@@ -234,10 +309,52 @@ export function SampleDetails({
           for clinical use.
         </p>
       </div>
-      <button className="secondary-button" onClick={() => navigate("/samples")}>
-        Back to sample library
-        <ArrowRight size={17} />
-      </button>
+      <div className="record-actions">
+        <button
+          className="secondary-button"
+          onClick={() => navigate("/samples")}
+        >
+          Back to sample library
+          <ArrowRight size={17} />
+        </button>
+        <button
+          className="secondary-button danger-button"
+          onClick={() => {
+            setConfirmDelete(true);
+            setError("");
+          }}
+        >
+          <Trash2 size={16} />
+          Delete Sample
+        </button>
+      </div>
+      {confirmDelete && (
+        <div className="notice delete-confirm" role="alert">
+          <div>
+            <strong>Delete {sample.sample_code}?</strong>
+            <p>This permanently removes the sample from your account.</p>
+          </div>
+          <button
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => setConfirmDelete(false)}
+          >
+            Cancel
+          </button>
+          <button
+            className="primary-button danger-button"
+            disabled={busy}
+            onClick={remove}
+          >
+            {busy ? "Deleting…" : "Delete permanently"}
+          </button>
+        </div>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
     </>
   );
 }
@@ -257,51 +374,9 @@ export function AddSample({
   navigate,
 }: {
   samples: Sample[];
-  onSave: (sample: Sample) => void;
+  onSave: (draft: SampleDraft) => Promise<void>;
   navigate: (path: string) => void;
 }) {
-  const nextNumber =
-    Math.max(
-      8,
-      ...samples.map((sample) => Number(sample.id.replace("BT-", "")) || 0),
-    ) + 1;
-  const [form, setForm] = useState({
-    id: `BT-${String(nextNumber).padStart(3, "0")}`,
-    name: "",
-    type: "Blood" as SampleType,
-    collected: "2026-10-17",
-    status: "Available" as SampleStatus,
-    location: "",
-    volume: "",
-    notes: "",
-  });
-  const [error, setError] = useState("");
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    const id = form.id.trim().toUpperCase();
-    if (!/^[A-Z0-9][A-Z0-9-]{1,23}$/.test(id))
-      return setError(
-        "Use a sample ID with 2–24 letters, numbers, or hyphens.",
-      );
-    if (samples.some((sample) => sample.id.toUpperCase() === id))
-      return setError("This sample ID already exists. Please use a unique ID.");
-    if (!form.name.trim())
-      return setError("Please give your fictional sample a name.");
-    const collectedDate = new Date(`${form.collected}T00:00:00.000Z`);
-    const validDate =
-      /^\d{4}-\d{2}-\d{2}$/.test(form.collected) &&
-      !Number.isNaN(collectedDate.getTime()) &&
-      collectedDate.toISOString().slice(0, 10) === form.collected;
-    if (!validDate) return setError("Please enter a valid collection date.");
-    onSave({
-      ...form,
-      id,
-      name: form.name.trim(),
-      location: form.location.trim() || "Not assigned",
-      volume: form.volume.trim() || "Not specified",
-      notes: form.notes.trim(),
-    });
-  }
   return (
     <>
       <BackButton
@@ -313,45 +388,126 @@ export function AddSample({
         title="Add a new sample"
         subtitle="A few details now. A more organized laboratory later."
       />
-      <form className="panel sample-form" onSubmit={submit}>
-        <div className="form-section-heading">
-          <span className="round-icon mint">
-            <TestTubeDiagonal size={21} />
-          </span>
-          <div>
-            <h2>Sample information</h2>
-            <p>Fields marked with * are required.</p>
-          </div>
+      <SampleForm
+        samples={samples}
+        onSave={onSave}
+        onCancel={() => navigate("/samples")}
+      />
+    </>
+  );
+}
+
+function SampleForm({
+  samples,
+  initial,
+  onSave,
+  onCancel,
+}: {
+  samples: Sample[];
+  initial?: Sample;
+  onSave: (draft: SampleDraft) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const nextNumber =
+    Math.max(
+      0,
+      ...samples.map((sample) =>
+        /^BT-\d+$/.test(sample.sample_code)
+          ? Number(sample.sample_code.slice(3))
+          : 0,
+      ),
+    ) + 1;
+  const [form, setForm] = useState<SampleDraft>(
+    initial
+      ? {
+          sample_code: initial.sample_code,
+          sample_type: initial.sample_type,
+          collection_date: initial.collection_date,
+          status: initial.status,
+          notes: initial.notes,
+        }
+      : {
+          sample_code: `BT-${String(nextNumber).padStart(3, "0")}`,
+          sample_type: "Blood",
+          collection_date: today(),
+          status: "Stored",
+          notes: "",
+        },
+  );
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    const code = form.sample_code.trim();
+    if (code.length < 2 || code.length > 80)
+      return setError("Use a sample code with 2–80 characters.");
+    if (
+      samples.some(
+        (sample) => sample.id !== initial?.id && sample.sample_code === code,
+      )
+    )
+      return setError(
+        "This sample code already exists. Please use a unique code.",
+      );
+    const collected = new Date(`${form.collection_date}T00:00:00.000Z`);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(form.collection_date) ||
+      Number.isNaN(collected.getTime()) ||
+      collected.toISOString().slice(0, 10) !== form.collection_date
+    )
+      return setError("Please enter a valid collection date.");
+    setBusy(true);
+    try {
+      await onSave({
+        ...form,
+        sample_code: code,
+        notes: form.notes?.trim() || null,
+      });
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="panel sample-form" onSubmit={submit}>
+      <div className="form-section-heading">
+        <span className="round-icon mint">
+          <TestTubeDiagonal size={21} />
+        </span>
+        <div>
+          <h2>Sample information</h2>
+          <p>Fields marked with * are required.</p>
         </div>
+      </div>
+      <fieldset className="form-fields" disabled={busy}>
         <div className="form-grid">
-          <label>
-            Sample ID *
+          <label className="span-two">
+            Sample ID / code *
             <input
               required
-              maxLength={24}
-              value={form.id}
-              onChange={(event) => setForm({ ...form, id: event.target.value })}
-            />
-            <small>A unique reference for this fictional record</small>
-          </label>
-          <label>
-            Sample name *
-            <input
-              required
-              maxLength={70}
-              placeholder="e.g. Synthetic blood control"
-              value={form.name}
+              minLength={2}
+              maxLength={80}
+              value={form.sample_code}
               onChange={(event) =>
-                setForm({ ...form, name: event.target.value })
+                setForm({ ...form, sample_code: event.target.value })
               }
             />
+            <small>
+              A unique reference for this fictional record; saved as the sample
+              code
+            </small>
           </label>
           <label>
             Sample type *
             <select
-              value={form.type}
+              value={form.sample_type}
               onChange={(event) =>
-                setForm({ ...form, type: event.target.value as SampleType })
+                setForm({
+                  ...form,
+                  sample_type: event.target.value as SampleType,
+                })
               }
             >
               {sampleTypes.map((type) => (
@@ -364,9 +520,9 @@ export function AddSample({
             <input
               required
               type="date"
-              value={form.collected}
+              value={form.collection_date}
               onChange={(event) =>
-                setForm({ ...form, collected: event.target.value })
+                setForm({ ...form, collection_date: event.target.value })
               }
             />
           </label>
@@ -378,72 +534,46 @@ export function AddSample({
                 setForm({ ...form, status: event.target.value as SampleStatus })
               }
             >
-              {["Available", "Processing", "Archived"].map((status) => (
+              {sampleStatuses.map((status) => (
                 <option key={status}>{status}</option>
               ))}
             </select>
           </label>
-          <label>
-            Storage location
-            <input
-              maxLength={60}
-              placeholder="e.g. Freezer A · Rack 2"
-              value={form.location}
-              onChange={(event) =>
-                setForm({ ...form, location: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            Volume / quantity
-            <input
-              maxLength={40}
-              placeholder="e.g. 2 mL"
-              value={form.volume}
-              onChange={(event) =>
-                setForm({ ...form, volume: event.target.value })
-              }
-            />
-          </label>
           <label className="span-two">
             Laboratory notes
             <textarea
-              maxLength={500}
+              maxLength={2000}
               rows={3}
-              placeholder="Optional notes about this fictional laboratory sample. No patient information."
-              value={form.notes}
+              placeholder="Optional fictional laboratory notes. No patient information."
+              value={form.notes ?? ""}
               onChange={(event) =>
                 setForm({ ...form, notes: event.target.value })
               }
             />
           </label>
         </div>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
         <div className="notice">
           <ShieldCheck size={19} />
           <p>
-            Fictional samples only. This prototype stores your additions in this
-            browser and does not upload any data.
+            Fictional samples only. This record will be saved securely to your
+            signed-in account.
           </p>
         </div>
         <div className="form-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => navigate("/samples")}
-          >
+          <button type="button" className="secondary-button" onClick={onCancel}>
             Cancel
           </button>
           <button className="primary-button" type="submit">
-            <Plus size={18} />
-            Add Sample
+            {initial ? <Save size={18} /> : <Plus size={18} />}
+            {busy ? "Saving…" : initial ? "Save changes" : "Add Sample"}
           </button>
         </div>
-      </form>
-    </>
+      </fieldset>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+    </form>
   );
 }
